@@ -1,0 +1,114 @@
+# ============================================================
+# ID: cf-template-002
+# Nome: S3 Bucket with Versioning and Encryption
+# Descrição: Template CloudFormation para provisionar Bucket S3
+#            com versionamento, criptografia e lifecycle
+# Versão: 1.0
+# Autor: Ana Maísa Gomes
+# Data: Outubro 2025
+# ============================================================
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CF-002: Bucket S3 com versionamento, criptografia e lifecycle policies'
+
+# ============================================================
+# PARAMETERS
+# ============================================================
+Parameters:
+  # PARAM-001: Nome do bucket
+  BucketName:
+    Type: String
+    Description: '[PARAM-001] Nome unico do bucket S3 (globalmente unico)'
+    AllowedPattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+    ConstraintDescription: Bucket name deve conter apenas letras minusculas e hifens
+
+# ============================================================
+# RESOURCES
+# ============================================================
+Resources:
+  # RES-001: S3 Bucket com configurações de segurança
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # CONFIG-001: Nome do bucket
+      BucketName: !Sub '${BucketName}-${AWS::AccountId}'
+      
+      # CONFIG-002: Criptografia AES256
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      
+      # CONFIG-003: Versionamento habilitado
+      VersioningConfiguration:
+        Status: Enabled
+      
+      # CONFIG-004: Bloqueio de acesso público
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      
+      # CONFIG-005: Lifecycle policies
+      LifecycleConfiguration:
+        Rules:
+          # RULE-001: Deletar versões antigas
+          - Id: '[RULE-001] DeleteOldVersions'
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+          # RULE-002: Transicionar para Glacier
+          - Id: '[RULE-002] TransitionToGlacier'
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: GLACIER
+      
+      Tags:
+        - Key: Name
+          Value: '[RES-001] Data-Bucket'
+        - Key: TemplateID
+          Value: 'CF-002'
+
+  # RES-002: Bucket Policy - Denegar uploads sem criptografia
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyText:
+        Version: '2012-10-17'
+        Statement:
+          # POLICY-001: Deny unencrypted uploads
+          - Sid: '[POLICY-001] DenyUnencryptedObjectUploads'
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub '${DataBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                's3:x-amz-server-side-encryption': AES256
+
+# ============================================================
+# OUTPUTS
+# ============================================================
+Outputs:
+  # OUT-001: Bucket Name
+  BucketName:
+    Description: '[OUT-001] Nome do bucket S3 criado'
+    Value: !Ref DataBucket
+    Export:
+      Name: 'CF-002-BucketName'
+
+  # OUT-002: Bucket ARN
+  BucketArn:
+    Description: '[OUT-002] ARN do bucket S3'
+    Value: !GetAtt DataBucket.Arn
+    Export:
+      Name: 'CF-002-BucketArn'
+
+  # OUT-003: Bucket Domain
+  BucketDomainName:
+    Description: '[OUT-003] Domain name do bucket'
+    Value: !GetAtt DataBucket.DomainName
+    Export:
+      Name: 'CF-002-DomainName'
